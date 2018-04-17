@@ -10,6 +10,7 @@ import com.iota.iri.network.UDPReceiver;
 import com.iota.iri.network.replicator.Replicator;
 import com.iota.iri.zmq.MessageQ;
 import com.iota.iri.service.TipsSolidifier;
+import com.iota.iri.service.TipsSelector;
 import com.iota.iri.storage.FileExportProvider;
 import com.iota.iri.storage.Indexable;
 import com.iota.iri.storage.Persistable;
@@ -35,6 +36,7 @@ public class Iota {
     public final Tangle tangle;
     public final TransactionValidator transactionValidator;
     public final TipsSolidifier tipsSolidifier;
+    public final TipsSelector tipsSelector;
     public final TransactionRequester transactionRequester;
     public final Node node;
     public final UDPReceiver udpReceiver;
@@ -98,6 +100,8 @@ public class Iota {
         ledgerValidator = new LedgerValidator(tangle, milestone, transactionRequester, messageQ);
         tipsSolidifier = new TipsSolidifier(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
                 maxTipSearchDepth, messageQ, testnet, milestoneStartIndex);
+        tipsSelector = new TipsSelector(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
+                maxTipSearchDepth, messageQ, testnet, milestoneStartIndex);
     }
 
     public void init() throws Exception {
@@ -117,6 +121,7 @@ public class Iota {
         milestone.init(SpongeFactory.Mode.CURLP27, ledgerValidator, revalidate);
         transactionValidator.init(testnet, configuration.integer(Configuration.DefaultConfSettings.MWM));
         tipsSolidifier.init();
+        tipsSelector.init();
         transactionRequester.init(configuration.doubling(Configuration.DefaultConfSettings.P_REMOVE_REQUEST.name()));
         udpReceiver.init();
         replicator.init();
@@ -183,6 +188,7 @@ public class Iota {
     public void shutdown() throws Exception {
         milestone.shutDown();
         tipsSolidifier.shutdown();
+        tipsSelector.shutdown();
         node.shutdown();
         udpReceiver.shutdown();
         replicator.shutdown();
