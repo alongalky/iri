@@ -589,7 +589,7 @@ public class API {
         final SecureRandom random = new SecureRandom();
         final int randomWalkCount = numWalks > maxRandomWalks || numWalks < 1 ? maxRandomWalks:numWalks;
         Hash referenceHash = null;
-        int maxDepth = instance.tipsManager.getMaxDepth();
+        int maxDepth = instance.tipsSolidifier.getMaxDepth();
         if (depth > maxDepth) {
             depth = maxDepth;
         }
@@ -611,7 +611,7 @@ public class API {
             Set<Hash> visitedHashes = new HashSet<>();
             Map<Hash, Long> diff = new HashMap<>();
             for (int i = 0; i < tipsToApprove; i++) {
-                tips[i] = instance.tipsManager.transactionToApprove(visitedHashes, diff, referenceHash, tips[0], depth, randomWalkCount, random);
+                tips[i] = instance.tipsSolidifier.transactionToApprove(visitedHashes, diff, referenceHash, tips[0], depth, randomWalkCount, random);
                 //update world view, so next tips selected will be inter-consistent
                 if (tips[i] == null || !instance.ledgerValidator.updateDiff(visitedHashes, diff, tips[i])) {
                     return null;

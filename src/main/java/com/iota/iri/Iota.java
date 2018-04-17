@@ -9,7 +9,7 @@ import com.iota.iri.network.Node;
 import com.iota.iri.network.UDPReceiver;
 import com.iota.iri.network.replicator.Replicator;
 import com.iota.iri.zmq.MessageQ;
-import com.iota.iri.service.TipsManager;
+import com.iota.iri.service.TipsSolidifier;
 import com.iota.iri.storage.FileExportProvider;
 import com.iota.iri.storage.Indexable;
 import com.iota.iri.storage.Persistable;
@@ -34,7 +34,7 @@ public class Iota {
     public final Milestone milestone;
     public final Tangle tangle;
     public final TransactionValidator transactionValidator;
-    public final TipsManager tipsManager;
+    public final TipsSolidifier tipsSolidifier;
     public final TransactionRequester transactionRequester;
     public final Node node;
     public final UDPReceiver udpReceiver;
@@ -96,7 +96,7 @@ public class Iota {
         replicator = new Replicator(node, tcpPort, maxPeers, testnet, reqHashSize);
         udpReceiver = new UDPReceiver(udpPort, node, configuration.integer(Configuration.DefaultConfSettings.TRANSACTION_PACKET_SIZE));
         ledgerValidator = new LedgerValidator(tangle, milestone, transactionRequester, messageQ);
-        tipsManager = new TipsManager(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
+        tipsSolidifier = new TipsSolidifier(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
                 maxTipSearchDepth, messageQ, testnet, milestoneStartIndex);
     }
 
@@ -116,7 +116,7 @@ public class Iota {
         }
         milestone.init(SpongeFactory.Mode.CURLP27, ledgerValidator, revalidate);
         transactionValidator.init(testnet, configuration.integer(Configuration.DefaultConfSettings.MWM));
-        tipsManager.init();
+        tipsSolidifier.init();
         transactionRequester.init(configuration.doubling(Configuration.DefaultConfSettings.P_REMOVE_REQUEST.name()));
         udpReceiver.init();
         replicator.init();
@@ -182,7 +182,7 @@ public class Iota {
 
     public void shutdown() throws Exception {
         milestone.shutDown();
-        tipsManager.shutdown();
+        tipsSolidifier.shutdown();
         node.shutdown();
         udpReceiver.shutdown();
         replicator.shutdown();

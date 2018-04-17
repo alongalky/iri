@@ -13,9 +13,9 @@ import org.slf4j.LoggerFactory;
 
 import com.iota.iri.Milestone;
 
-public class TipsManager {
+public class TipsSolidifier {
 
-    private final Logger log = LoggerFactory.getLogger(TipsManager.class);
+    private final Logger log = LoggerFactory.getLogger(TipsSolidifier.class);
     private final Tangle tangle;
     private final TipsViewModel tipsViewModel;
     private final Milestone milestone;
@@ -30,7 +30,7 @@ public class TipsManager {
     private final int maxDepth;
     private Thread solidityRescanHandle;
 
-    public TipsManager(final Tangle tangle,
+    public TipsSolidifier(final Tangle tangle,
                        final LedgerValidator ledgerValidator,
                        final TransactionValidator transactionValidator,
                        final TipsViewModel tipsViewModel,

@@ -27,18 +27,18 @@ import static com.iota.iri.controllers.TransactionViewModelTest.getRandomTransac
 /**
  * Created by paul on 4/27/17.
  */
-public class TipsManagerTest {
+public class TipsSolidifierTest {
 
     private static final TemporaryFolder dbFolder = new TemporaryFolder();
     private static final TemporaryFolder logFolder = new TemporaryFolder();
     private static Tangle tangle;
-    private static TipsManager tipsManager;
+    private static TipsSolidifier tipsSolidifier;
 
     @Test
     public void capSum() throws Exception {
         long a = 0, b, max = Long.MAX_VALUE/2;
         for(b = 0; b < max; b+= max/100) {
-            a = TipsManager.capSum(a, b, max);
+            a = TipsSolidifier.capSum(a, b, max);
             Assert.assertTrue("a should never go above max", a <= max);
         }
     }
@@ -68,7 +68,7 @@ public class TipsManagerTest {
                 transactionValidator, false, messageQ, numOfKeysInMilestone,
                 milestoneStartIndex, true);
         LedgerValidator ledgerValidator = new LedgerValidator(tangle, milestone, transactionRequester, messageQ);
-        tipsManager = new TipsManager(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
+        tipsSolidifier = new TipsSolidifier(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
                 15, messageQ, false, milestoneStartIndex);
     }
 
@@ -82,7 +82,7 @@ public class TipsManagerTest {
         transaction1.store(tangle);
         transaction2.store(tangle);
         Map<Hash, Set<Hash>> ratings = new HashMap<>();
-        tipsManager.updateHashRatings(transaction.getHash(), ratings, new HashSet<>());
+        tipsSolidifier.updateHashRatings(transaction.getHash(), ratings, new HashSet<>());
         Assert.assertEquals(ratings.get(transaction.getHash()).size(), 3);
         Assert.assertEquals(ratings.get(transaction1.getHash()).size(), 2);
         Assert.assertEquals(ratings.get(transaction2.getHash()).size(), 1);
@@ -102,7 +102,7 @@ public class TipsManagerTest {
         transaction3.store(tangle);
         transaction4.store(tangle);
         Map<Hash, Set<Hash>> ratings = new HashMap<>();
-        tipsManager.updateHashRatings(transaction.getHash(), ratings, new HashSet<>());
+        tipsSolidifier.updateHashRatings(transaction.getHash(), ratings, new HashSet<>());
         Assert.assertEquals(ratings.get(transaction.getHash()).size(), 5);
         Assert.assertEquals(ratings.get(transaction1.getHash()).size(),4);
         Assert.assertEquals(ratings.get(transaction2.getHash()).size(), 3);
@@ -122,7 +122,7 @@ public class TipsManagerTest {
         transaction3.store(tangle);
         transaction4.store(tangle);
         Map<Hash, Long> ratings = new HashMap<>();
-        tipsManager.recursiveUpdateRatings(transaction.getHash(), ratings, new HashSet<>());
+        tipsSolidifier.recursiveUpdateRatings(transaction.getHash(), ratings, new HashSet<>());
         Assert.assertTrue(ratings.get(transaction.getHash()).equals(5L));
     }
 
@@ -136,7 +136,7 @@ public class TipsManagerTest {
             new TransactionViewModel(getRandomTransactionWithTrunkAndBranch(hashes[i-1], hashes[i-1]), hashes[i]).store(tangle);
         }
         Map<Hash, Long> ratings = new HashMap<>();
-        tipsManager.recursiveUpdateRatings(hashes[0], ratings, new HashSet<>());
+        tipsSolidifier.recursiveUpdateRatings(hashes[0], ratings, new HashSet<>());
         Assert.assertTrue(ratings.get(hashes[0]).equals(5L));
     }
 
@@ -150,7 +150,7 @@ public class TipsManagerTest {
             new TransactionViewModel(getRandomTransactionWithTrunkAndBranch(hashes[i-1], hashes[i-(i > 1 ?2:1)]), hashes[i]).store(tangle);
         }
         Map<Hash, Long> ratings = new HashMap<>();
-        tipsManager.recursiveUpdateRatings(hashes[0], ratings, new HashSet<>());
+        tipsSolidifier.recursiveUpdateRatings(hashes[0], ratings, new HashSet<>());
         Assert.assertTrue(ratings.get(hashes[0]).equals(12L));
     }
 
@@ -177,7 +177,7 @@ public class TipsManagerTest {
         }
         Map<Hash, Long> ratings = new HashMap<>();
         long start = System.currentTimeMillis();
-        tipsManager.serialUpdateRatings(new HashSet<>(), hashes[0], ratings, new HashSet<>(), null);
+        tipsSolidifier.serialUpdateRatings(new HashSet<>(), hashes[0], ratings, new HashSet<>(), null);
         return System.currentTimeMillis() - start;
     }
 }
