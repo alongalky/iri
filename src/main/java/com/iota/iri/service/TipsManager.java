@@ -25,21 +25,10 @@ public class TipsManager {
     private final boolean testnet;
     private final int milestoneStartIndex;
 
-    private int RATING_THRESHOLD = 75; // Must be in [0..100] range
     private boolean shuttingDown = false;
     private int RESCAN_TX_TO_REQUEST_INTERVAL = 750;
     private final int maxDepth;
     private Thread solidityRescanHandle;
-
-    public void setRATING_THRESHOLD(int value) {
-        if (value < 0) {
-            value = 0;
-        }
-        if (value > 100) {
-            value = 100;
-        }
-        RATING_THRESHOLD = value;
-    }
 
     public TipsManager(final Tangle tangle,
                        final LedgerValidator ledgerValidator,
