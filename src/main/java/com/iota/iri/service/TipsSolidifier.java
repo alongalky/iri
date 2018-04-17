@@ -1,15 +1,13 @@
 package com.iota.iri.service;
 
-import com.iota.iri.LedgerValidator;
 import com.iota.iri.TransactionValidator;
+import com.iota.iri.controllers.TipsViewModel;
+import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.model.Hash;
-import com.iota.iri.controllers.*;
 import com.iota.iri.storage.Tangle;
-import com.iota.iri.zmq.MessageQ;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.iota.iri.Milestone;
 
 public class TipsSolidifier {
 
@@ -23,14 +21,8 @@ public class TipsSolidifier {
     private Thread solidityRescanHandle;
 
     public TipsSolidifier(final Tangle tangle,
-                       final LedgerValidator ledgerValidator,
                        final TransactionValidator transactionValidator,
-                       final TipsViewModel tipsViewModel,
-                       final Milestone milestone,
-                       final int maxDepth,
-                       final MessageQ messageQ,
-                       final boolean testnet,
-                       final int milestoneStartIndex) {
+                       final TipsViewModel tipsViewModel) {
         this.tangle = tangle;
         this.transactionValidator = transactionValidator;
         this.tipsViewModel = tipsViewModel;

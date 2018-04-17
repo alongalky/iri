@@ -1,5 +1,13 @@
 package com.iota.iri.service;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+
 import com.iota.iri.LedgerValidator;
 import com.iota.iri.Milestone;
 import com.iota.iri.Snapshot;
@@ -12,18 +20,18 @@ import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.storage.Tangle;
 import com.iota.iri.storage.rocksDB.RocksDBPersistenceProvider;
 import com.iota.iri.zmq.MessageQ;
+
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import java.util.*;
-
 import static com.iota.iri.controllers.TransactionViewModelTest.getRandomTransactionHash;
 import static com.iota.iri.controllers.TransactionViewModelTest.getRandomTransactionTrits;
 import static com.iota.iri.controllers.TransactionViewModelTest.getRandomTransactionWithTrunkAndBranch;
 
+/**
 /**
  * Created by paul on 4/27/17.
  */
@@ -68,7 +76,7 @@ public class TipsSelectorTest {
                 transactionValidator, false, messageQ, numOfKeysInMilestone,
                 milestoneStartIndex, true);
         LedgerValidator ledgerValidator = new LedgerValidator(tangle, milestone, transactionRequester, messageQ);
-        tipsSelector = new TipsSelector(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
+        tipsSelector = new TipsSelector(tangle, ledgerValidator, transactionValidator, milestone,
                 15, messageQ, false, milestoneStartIndex);
     }
 

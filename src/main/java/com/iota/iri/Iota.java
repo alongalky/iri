@@ -1,16 +1,22 @@
 package com.iota.iri;
 
+import java.util.List;
+
 import com.iota.iri.conf.Configuration;
-import com.iota.iri.controllers.*;
+import com.iota.iri.controllers.AddressViewModel;
+import com.iota.iri.controllers.ApproveeViewModel;
+import com.iota.iri.controllers.BundleViewModel;
+import com.iota.iri.controllers.TagViewModel;
+import com.iota.iri.controllers.TipsViewModel;
+import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.hash.SpongeFactory;
-import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.model.Hash;
 import com.iota.iri.network.Node;
+import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.network.UDPReceiver;
 import com.iota.iri.network.replicator.Replicator;
-import com.iota.iri.zmq.MessageQ;
-import com.iota.iri.service.TipsSolidifier;
 import com.iota.iri.service.TipsSelector;
+import com.iota.iri.service.TipsSolidifier;
 import com.iota.iri.storage.FileExportProvider;
 import com.iota.iri.storage.Indexable;
 import com.iota.iri.storage.Persistable;
@@ -18,12 +24,12 @@ import com.iota.iri.storage.Tangle;
 import com.iota.iri.storage.ZmqPublishProvider;
 import com.iota.iri.storage.rocksDB.RocksDBPersistenceProvider;
 import com.iota.iri.utils.Pair;
+import com.iota.iri.zmq.MessageQ;
+
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.List;
 
 /**
  * Created by paul on 5/19/17.
@@ -98,9 +104,8 @@ public class Iota {
         replicator = new Replicator(node, tcpPort, maxPeers, testnet, reqHashSize);
         udpReceiver = new UDPReceiver(udpPort, node, configuration.integer(Configuration.DefaultConfSettings.TRANSACTION_PACKET_SIZE));
         ledgerValidator = new LedgerValidator(tangle, milestone, transactionRequester, messageQ);
-        tipsSolidifier = new TipsSolidifier(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
-                maxTipSearchDepth, messageQ, testnet, milestoneStartIndex);
-        tipsSelector = new TipsSelector(tangle, ledgerValidator, transactionValidator, tipsViewModel, milestone,
+        tipsSolidifier = new TipsSolidifier(tangle, transactionValidator, tipsViewModel);
+        tipsSelector = new TipsSelector(tangle, ledgerValidator, transactionValidator, milestone,
                 maxTipSearchDepth, messageQ, testnet, milestoneStartIndex);
     }
 

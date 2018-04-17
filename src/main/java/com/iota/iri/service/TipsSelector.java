@@ -1,17 +1,29 @@
 package com.iota.iri.service;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
+import java.util.Random;
+import java.util.Set;
+import java.util.Stack;
 
 import com.iota.iri.LedgerValidator;
+import com.iota.iri.Milestone;
 import com.iota.iri.TransactionValidator;
+import com.iota.iri.controllers.MilestoneViewModel;
+import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.model.Hash;
-import com.iota.iri.controllers.*;
 import com.iota.iri.storage.Tangle;
 import com.iota.iri.zmq.MessageQ;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.iota.iri.Milestone;
 
 public class TipsSelector {
 
@@ -28,7 +40,6 @@ public class TipsSelector {
     public TipsSelector(final Tangle tangle,
                        final LedgerValidator ledgerValidator,
                        final TransactionValidator transactionValidator,
-                       final TipsViewModel tipsViewModel,
                        final Milestone milestone,
                        final int maxDepth,
                        final MessageQ messageQ,
