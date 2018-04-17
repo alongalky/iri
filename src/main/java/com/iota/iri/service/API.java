@@ -293,12 +293,8 @@ public class API {
                     if(depth < 0 || (reference == null && depth == 0)) {
                         return ErrorResponse.create("Invalid depth input");
                     }
-                    int numWalks = request.containsKey("numWalks") ? getParameterAsInt(request,"numWalks") : 1;
-                    if(numWalks < minRandomWalks) {
-                        numWalks = minRandomWalks;
-                    }
                     try {
-                        final Hash[] tips = getTransactionToApproveStatement(depth, reference, numWalks);
+                        final Hash[] tips = getTransactionToApproveStatement(depth, reference);
                         if(tips == null) {
                             return ErrorResponse.create("The subtangle is not solid");
                         }
@@ -583,11 +579,10 @@ public class API {
         ellapsedTime_getTxToApprove += ellapsedTime;
     }
 
-    public synchronized Hash[] getTransactionToApproveStatement(int depth, final String reference, final int numWalks) throws Exception {
+    public synchronized Hash[] getTransactionToApproveStatement(int depth, final String reference) throws Exception {
         int tipsToApprove = 2;
         Hash[] tips = new Hash[tipsToApprove];
         final SecureRandom random = new SecureRandom();
-        final int randomWalkCount = numWalks > maxRandomWalks || numWalks < 1 ? maxRandomWalks:numWalks;
         Hash referenceHash = null;
         int maxDepth = instance.tipsSelector.getMaxDepth();
         if (depth > maxDepth) {
@@ -611,7 +606,7 @@ public class API {
             Set<Hash> visitedHashes = new HashSet<>();
             Map<Hash, Long> diff = new HashMap<>();
             for (int i = 0; i < tipsToApprove; i++) {
-                tips[i] = instance.tipsSelector.transactionToApprove(visitedHashes, diff, referenceHash, tips[0], depth, randomWalkCount, random);
+                tips[i] = instance.tipsSelector.transactionToApprove(visitedHashes, diff, referenceHash, tips[0], depth, random);
                 //update world view, so next tips selected will be inter-consistent
                 if (tips[i] == null || !instance.ledgerValidator.updateDiff(visitedHashes, diff, tips[i])) {
                     return null;

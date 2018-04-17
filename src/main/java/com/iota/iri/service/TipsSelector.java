@@ -59,7 +59,7 @@ public class TipsSelector {
 
     public void shutdown() { }
 
-    Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash reference, final Hash extraTip, int depth, final int iterations, Random seed) throws Exception {
+    Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash reference, final Hash extraTip, int depth, Random seed) throws Exception {
 
         long startTime = System.nanoTime();
         if (depth > maxDepth) {
@@ -77,7 +77,7 @@ public class TipsSelector {
                 serialUpdateRatings(visitedHashes, tip, ratings, analyzedTips, extraTip);
                 analyzedTips.clear();
                 if (ledgerValidator.updateDiff(visitedHashes, diff, tip)) {
-                    return markovChainMonteCarlo(visitedHashes, diff, tip, extraTip, ratings, iterations, milestone.latestSolidSubtangleMilestoneIndex - depth * 2, maxDepthOk, seed);
+                    return randomWalk(visitedHashes, diff, tip, extraTip, ratings, maxDepth, maxDepthOk, seed);
                 }
                 else {
                     throw new RuntimeException("starting tip failed consistency check: " + tip.toString());
@@ -109,34 +109,6 @@ public class TipsSelector {
         }
 
         return milestone.latestSolidSubtangleMilestone;
-    }
-
-    Hash markovChainMonteCarlo(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash tip, final Hash extraTip, final Map<Hash, Long> ratings, final int iterations, final int maxDepth, final Set<Hash> maxDepthOk, final Random seed) throws Exception {
-        Map<Hash, Integer> monteCarloIntegrations = new HashMap<>();
-        Hash tail;
-        for (int i = iterations; i-- > 0; ) {
-            tail = randomWalk(visitedHashes, diff, tip, extraTip, ratings, maxDepth, maxDepthOk, seed);
-            if (monteCarloIntegrations.containsKey(tail)) {
-                monteCarloIntegrations.put(tail, monteCarloIntegrations.get(tail) + 1);
-            }
-            else {
-                monteCarloIntegrations.put(tail, 1);
-            }
-        }
-        return monteCarloIntegrations.entrySet().stream().reduce((a, b) -> {
-            if (a.getValue() > b.getValue()) {
-                return a;
-            }
-            else if (a.getValue() < b.getValue()) {
-                return b;
-            }
-            else if (seed.nextBoolean()) {
-                return a;
-            }
-            else {
-                return b;
-            }
-        }).map(Map.Entry::getKey).orElse(null);
     }
 
     Hash randomWalk(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash start, final Hash extraTip, final Map<Hash, Long> ratings, final int maxDepth, final Set<Hash> maxDepthOk, Random rnd) throws Exception {
