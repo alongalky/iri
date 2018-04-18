@@ -1,17 +1,18 @@
 package com.iota.iri.service;
 
+import java.security.SecureRandom;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.Stack;
+import java.util.Arrays;
 
 import com.iota.iri.LedgerValidator;
 import com.iota.iri.Milestone;
@@ -58,6 +59,35 @@ public class TipsSelector {
     public void init() { }
 
     public void shutdown() { }
+
+    public Hash[] getTransactionsToApprove(int depth) throws Exception {
+        int tipsToApprove = 2;
+        Hash[] tips = new Hash[tipsToApprove];
+        final SecureRandom random = new SecureRandom();
+        if (depth > maxDepth) {
+            depth = maxDepth;
+        }
+
+        milestone.latestSnapshot.rwlock.readLock().lock();
+        try {
+            Set<Hash> visitedHashes = new HashSet<>();
+            Map<Hash, Long> diff = new HashMap<>();
+            for (int i = 0; i < tipsToApprove; i++) {
+                tips[i] = transactionToApprove(visitedHashes, diff, depth, random);
+                //update world view, so next tips selected will be inter-consistent
+                if (tips[i] == null || !ledgerValidator.updateDiff(visitedHashes, diff, tips[i])) {
+                    return null;
+                }
+            }
+
+            if (ledgerValidator.checkConsistency(Arrays.asList(tips))) {
+                return tips;
+            }
+        } finally {
+            milestone.latestSnapshot.rwlock.readLock().unlock();
+        }
+        throw new RuntimeException("inconsistent tips pair selected");
+    }
 
     Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, int depth, Random seed) throws Exception {
 

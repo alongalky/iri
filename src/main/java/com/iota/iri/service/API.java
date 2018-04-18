@@ -1,8 +1,41 @@
 package com.iota.iri.service;
 
+import static io.undertow.Handlers.path;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.iota.iri.*;
+import com.iota.iri.BundleValidator;
+import com.iota.iri.IRI;
+import com.iota.iri.IXI;
+import com.iota.iri.Iota;
+import com.iota.iri.SignedFiles;
+import com.iota.iri.Snapshot;
 import com.iota.iri.conf.Configuration;
 import com.iota.iri.conf.Configuration.DefaultConfSettings;
 import com.iota.iri.controllers.AddressViewModel;
@@ -15,9 +48,33 @@ import com.iota.iri.hash.Sponge;
 import com.iota.iri.hash.SpongeFactory;
 import com.iota.iri.model.Hash;
 import com.iota.iri.network.Neighbor;
-import com.iota.iri.service.dto.*;
+import com.iota.iri.service.dto.AbstractResponse;
+import com.iota.iri.service.dto.AccessLimitedResponse;
+import com.iota.iri.service.dto.AddedNeighborsResponse;
+import com.iota.iri.service.dto.AttachToTangleResponse;
+import com.iota.iri.service.dto.CheckConsistency;
+import com.iota.iri.service.dto.ErrorResponse;
+import com.iota.iri.service.dto.ExceptionResponse;
+import com.iota.iri.service.dto.FindTransactionsResponse;
+import com.iota.iri.service.dto.GetBalancesResponse;
+import com.iota.iri.service.dto.GetInclusionStatesResponse;
+import com.iota.iri.service.dto.GetNeighborsResponse;
+import com.iota.iri.service.dto.GetNodeInfoResponse;
+import com.iota.iri.service.dto.GetTipsResponse;
+import com.iota.iri.service.dto.GetTransactionsToApproveResponse;
+import com.iota.iri.service.dto.GetTrytesResponse;
+import com.iota.iri.service.dto.RemoveNeighborsResponse;
+import com.iota.iri.service.dto.wereAddressesSpentFrom;
 import com.iota.iri.utils.Converter;
 import com.iota.iri.utils.MapIdentityManager;
+
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.xnio.channels.StreamSinkChannel;
+import org.xnio.streams.ChannelInputStream;
+
 import io.undertow.Undertow;
 import io.undertow.security.api.AuthenticationMechanism;
 import io.undertow.security.api.AuthenticationMode;
@@ -29,29 +86,12 @@ import io.undertow.security.idm.IdentityManager;
 import io.undertow.security.impl.BasicAuthenticationMechanism;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
-import io.undertow.util.*;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.xnio.channels.StreamSinkChannel;
-import org.xnio.streams.ChannelInputStream;
-
-import java.io.*;
-import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import static io.undertow.Handlers.path;
+import io.undertow.util.HeaderMap;
+import io.undertow.util.Headers;
+import io.undertow.util.HttpString;
+import io.undertow.util.Methods;
+import io.undertow.util.MimeMappings;
+import io.undertow.util.StatusCodes;
 
 @SuppressWarnings("unchecked")
 public class API {
@@ -561,42 +601,19 @@ public class API {
     }
 
     public synchronized Hash[] getTransactionToApproveStatement(int depth) throws Exception {
-        int tipsToApprove = 2;
-        Hash[] tips = new Hash[tipsToApprove];
-        final SecureRandom random = new SecureRandom();
-        int maxDepth = instance.tipsSelector.getMaxDepth();
-        if (depth > maxDepth) {
-            depth = maxDepth;
+        Hash[] tips = instance.tipsSelector.getTransactionsToApprove(depth);
+
+        API.incCounter_getTxToApprove();
+        if ((getCounter_getTxToApprove() % 100) == 0) {
+            String sb = "Last 100 getTxToApprove consumed " +
+                    API.getEllapsedTime_getTxToApprove() / 1000000000L +
+                    " seconds processing time.";
+            log.info(sb);
+            counter_getTxToApprove = 0;
+            ellapsedTime_getTxToApprove = 0L;
         }
 
-        instance.milestone.latestSnapshot.rwlock.readLock().lock();
-        try {
-            Set<Hash> visitedHashes = new HashSet<>();
-            Map<Hash, Long> diff = new HashMap<>();
-            for (int i = 0; i < tipsToApprove; i++) {
-                tips[i] = instance.tipsSelector.transactionToApprove(visitedHashes, diff, depth, random);
-                //update world view, so next tips selected will be inter-consistent
-                if (tips[i] == null || !instance.ledgerValidator.updateDiff(visitedHashes, diff, tips[i])) {
-                    return null;
-                }
-            }
-            API.incCounter_getTxToApprove();
-            if ((getCounter_getTxToApprove() % 100) == 0) {
-                String sb = "Last 100 getTxToApprove consumed " +
-                        API.getEllapsedTime_getTxToApprove() / 1000000000L +
-                        " seconds processing time.";
-                log.info(sb);
-                counter_getTxToApprove = 0;
-                ellapsedTime_getTxToApprove = 0L;
-            }
-
-            if (instance.ledgerValidator.checkConsistency(Arrays.asList(tips))) {
-                return tips;
-            }
-        } finally {
-            instance.milestone.latestSnapshot.rwlock.readLock().unlock();
-        }
-        throw new RuntimeException("inconsistent tips pair selected");
+        return tips;
     }
 
     private synchronized AbstractResponse getTipsStatement() throws Exception {
