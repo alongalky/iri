@@ -66,11 +66,6 @@ public class TipsSelector {
             depth = maxDepth;
         }
 
-        if (milestone.latestSolidSubtangleMilestoneIndex <= milestoneStartIndex &&
-                milestone.latestMilestoneIndex != milestoneStartIndex) {
-            return null;
-        }
-
         milestone.latestSnapshot.rwlock.readLock().lock();
 
         Hash entryPoint = entryPoint(depth);
@@ -84,16 +79,9 @@ public class TipsSelector {
                 final SecureRandom random = new SecureRandom();
 
                 Map<Hash, Long> ratings = new HashMap<>();
-                Set<Hash> analyzedTips = new HashSet<>();
                 Set<Hash> maxDepthOk = new HashSet<>();
                 try {
-                    analyzedTips.clear();
-                    if (ledgerValidator.updateDiff(visitedHashes, diff, entryPoint)) {
-                        tips[i] = randomWalk(visitedHashes, diff, entryPoint, ratings, maxDepth, maxDepthOk, random);
-                    }
-                    else {
-                        throw new RuntimeException("Entry point transaction failed consistency check: " + entryPoint.toString());
-                    }
+                    tips[i] = randomWalk(visitedHashes, diff, entryPoint, ratings, maxDepth, maxDepthOk, random);
                 } catch (Exception e) {
                     e.printStackTrace();
                     log.error("Encountered error: " + e.getLocalizedMessage());
@@ -102,7 +90,7 @@ public class TipsSelector {
                     API.incEllapsedTime_getTxToApprove(System.nanoTime() - startTime);
                 }
 
-                //update world view, so next tips selected will be inter-consistent
+                // Update world view, so second selected tip will be consistent with the first
                 if (tips[i] == null || !ledgerValidator.updateDiff(visitedHashes, diff, tips[i])) {
                     return null;
                 }
