@@ -1,18 +1,17 @@
 package com.iota.iri.service;
 
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.Stack;
-import java.util.Arrays;
+import java.util.stream.Collectors;
 
 import com.iota.iri.LedgerValidator;
 import com.iota.iri.Milestone;
@@ -21,6 +20,7 @@ import com.iota.iri.controllers.MilestoneViewModel;
 import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.model.Hash;
 import com.iota.iri.storage.Tangle;
+import com.iota.iri.utils.CumulativeWeight;
 import com.iota.iri.zmq.MessageQ;
 
 import org.slf4j.Logger;
@@ -37,6 +37,7 @@ public class TipsSelector {
     private final boolean testnet;
     private final int milestoneStartIndex;
     private final int maxDepth;
+    private Set<Hash> maxDepthOk;
 
     public TipsSelector(final Tangle tangle,
                        final LedgerValidator ledgerValidator,
@@ -54,6 +55,7 @@ public class TipsSelector {
         this.messageQ = messageQ;
         this.testnet = testnet;
         this.milestoneStartIndex = milestoneStartIndex;
+        this.maxDepthOk = new HashSet<>();
     }
 
     public void init() { }
@@ -68,8 +70,12 @@ public class TipsSelector {
 
         milestone.latestSnapshot.rwlock.readLock().lock();
 
-        Hash entryPoint = entryPoint(depth);
         try {
+            Hash entryPoint = entryPoint(depth);
+            Set<Hash> validTransactions = getValidAncestors(entryPoint);
+            Map<Hash, Long> cumulativeWeights = 
+                CumulativeWeight.calculateCumulativeWeight(validTransactions, entryPoint);
+
             Set<Hash> visitedHashes = new HashSet<>();
             Map<Hash, Long> diff = new HashMap<>();
 
@@ -78,10 +84,14 @@ public class TipsSelector {
 
                 final SecureRandom random = new SecureRandom();
 
-                Map<Hash, Long> ratings = new HashMap<>();
-                Set<Hash> maxDepthOk = new HashSet<>();
                 try {
-                    tips[i] = randomWalk(visitedHashes, diff, entryPoint, ratings, maxDepth, maxDepthOk, random);
+                    tips[i] = randomWalk(
+                            validTransactions, 
+                            visitedHashes,
+                            diff,
+                            entryPoint,
+                            cumulativeWeights,
+                            random);
                 } catch (Exception e) {
                     e.printStackTrace();
                     log.error("Encountered error: " + e.getLocalizedMessage());
@@ -116,89 +126,66 @@ public class TipsSelector {
         return milestone.latestSolidSubtangleMilestone;
     }
 
-    Hash randomWalk(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash start, final Map<Hash, Long> ratings, final int maxDepth, final Set<Hash> maxDepthOk, Random rnd) throws Exception {
-        Hash tip = start, tail = tip;
-        Hash[] tips;
-        Set<Hash> tipSet;
-        Set<Hash> analyzedTips = new HashSet<>();
+    Hash randomWalk(
+            final Set<Hash> validTransactions,
+            final Set<Hash> visitedHashes,
+            final Map<Hash,
+            Long> diff,
+            final Hash entryPoint,
+            final Map<Hash, Long> cumulativeWeights,
+            Random rnd) throws Exception {
+        Hash currentTxHash = entryPoint, tail = currentTxHash;
+        Hash[] approverHashes;
         int traversedTails = 0;
-        TransactionViewModel transactionViewModel;
+        TransactionViewModel currentTx;
         int approverIndex;
         double ratingWeight;
         double[] walkRatings;
         Map<Hash, Long> myDiff = new HashMap<>(diff);
         Set<Hash> myApprovedHashes = new HashSet<>(visitedHashes);
 
-        while (tip != null) {
-            transactionViewModel = TransactionViewModel.fromHash(tangle, tip);
-            tipSet = transactionViewModel.getApprovers(tangle).getHashes();
-            if (transactionViewModel.getCurrentIndex() == 0) {
-                if (transactionViewModel.getType() == TransactionViewModel.PREFILLED_SLOT) {
-                    log.info("Reason to stop: transactionViewModel == null");
-                    messageQ.publish("rtsn %s", transactionViewModel.getHash());
-                    break;
-                }
-                else if (!transactionValidator.checkSolidity(transactionViewModel.getHash(), false)) {
-                    log.info("Reason to stop: !checkSolidity");
-                    messageQ.publish("rtss %s", transactionViewModel.getHash());
-                    break;
-                }
-                else if (belowMaxDepth(transactionViewModel.getHash(), maxDepth, maxDepthOk)) {
-                    log.info("Reason to stop: belowMaxDepth");
-                    break;
-                }
-                else if (!ledgerValidator.updateDiff(myApprovedHashes, myDiff, transactionViewModel.getHash())) {
+        while (currentTxHash != null) {
+            currentTx = TransactionViewModel.fromHash(tangle, currentTxHash);
+
+            Set<Hash> approvers = currentTx.getApprovers(tangle).getHashes().stream()
+                .filter(t -> validTransactions.contains(t))
+                .collect(Collectors.toSet());
+
+            if (currentTx.getCurrentIndex() == 0) {
+                if (!ledgerValidator.updateDiff(myApprovedHashes, myDiff, currentTx.getHash())) {
                     log.info("Reason to stop: !LedgerValidator");
-                    messageQ.publish("rtsv %s", transactionViewModel.getHash());
+                    messageQ.publish("rtsv %s", currentTx.getHash());
                     break;
                 }
                 // set the tail here!
-                tail = tip;
+                tail = currentTxHash;
                 traversedTails++;
             }
-            if (tipSet.size() == 0) {
+            if (approvers.size() == 0) {
                 log.info("Reason to stop: TransactionViewModel is a tip");
-                messageQ.publish("rtst %s", tip);
+                messageQ.publish("rtst %s", currentTxHash);
                 break;
-            }
-            else if (tipSet.size() == 1) {
-                Iterator<Hash> hashIterator = tipSet.iterator();
-                if (hashIterator.hasNext()) {
-                    tip = hashIterator.next();
-                }
-                else {
-                    tip = null;
-                }
             }
             else {
                 // walk to the next approver
-                tips = tipSet.toArray(new Hash[tipSet.size()]);
-                if (!ratings.containsKey(tip)) {
-                    serialUpdateRatings(myApprovedHashes, tip, ratings, analyzedTips);
-                    analyzedTips.clear();
-                }
+                approverHashes = approvers.toArray(new Hash[approvers.size()]);
 
-                walkRatings = new double[tips.length];
+                walkRatings = new double[approverHashes.length];
                 double maxRating = 0;
-                long tipRating = ratings.get(tip);
-                for (int i = 0; i < tips.length; i++) {
+                long tipRating = cumulativeWeights.get(currentTxHash);
+                for (int i = 0; i < approverHashes.length; i++) {
                     //transition probability = ((Hx-Hy)^-3)/maxRating
-                    walkRatings[i] = Math.pow(tipRating - ratings.getOrDefault(tips[i], 0L), -3);
+                    walkRatings[i] = Math.pow(tipRating - cumulativeWeights.getOrDefault(approverHashes[i], 0L), -3);
                     maxRating += walkRatings[i];
                 }
                 ratingWeight = rnd.nextDouble() * maxRating;
-                for (approverIndex = tips.length; approverIndex-- > 1; ) {
+                for (approverIndex = approverHashes.length; approverIndex-- > 1; ) {
                     ratingWeight -= walkRatings[approverIndex];
                     if (ratingWeight <= 0) {
                         break;
                     }
                 }
-                tip = tips[approverIndex];
-                if (transactionViewModel.getHash().equals(tip)) {
-                    log.info("Reason to stop: transactionViewModel==itself");
-                    messageQ.publish("rtsl %s", transactionViewModel.getHash());
-                    break;
-                }
+                currentTxHash = approverHashes[approverIndex];
             }
         }
         log.info("Tx traversed to find tip: " + traversedTails);
@@ -206,60 +193,7 @@ public class TipsSelector {
         return tail;
     }
 
-    void serialUpdateRatings(final Set<Hash> visitedHashes, final Hash txHash, final Map<Hash, Long> ratings, final Set<Hash> analyzedTips) throws Exception {
-        Stack<Hash> hashesToRate = new Stack<>();
-        hashesToRate.push(txHash);
-        Hash currentHash;
-        boolean addedBack;
-        while (!hashesToRate.empty()) {
-            currentHash = hashesToRate.pop();
-            TransactionViewModel transactionViewModel = TransactionViewModel.fromHash(tangle, currentHash);
-            addedBack = false;
-            Set<Hash> approvers = transactionViewModel.getApprovers(tangle).getHashes();
-            for (Hash approver : approvers) {
-                if (ratings.get(approver) == null && !approver.equals(currentHash)) {
-                    if (!addedBack) {
-                        addedBack = true;
-                        hashesToRate.push(currentHash);
-                    }
-                    hashesToRate.push(approver);
-                }
-            }
-            if (!addedBack && analyzedTips.add(currentHash)) {
-                long rating = approvers.stream().map(ratings::get).filter(Objects::nonNull)
-                        .reduce((a, b) -> capSum(a, b, Long.MAX_VALUE / 2)).orElse(0L);
-                ratings.put(currentHash, rating);
-            }
-        }
-    }
-
-    Set<Hash> updateHashRatings(Hash txHash, Map<Hash, Set<Hash>> ratings, Set<Hash> analyzedTips) throws Exception {
-        Set<Hash> rating;
-        if (analyzedTips.add(txHash)) {
-            TransactionViewModel transactionViewModel = TransactionViewModel.fromHash(tangle, txHash);
-            rating = new HashSet<>(Collections.singleton(txHash));
-            Set<Hash> approverHashes = transactionViewModel.getApprovers(tangle).getHashes();
-            for (Hash approver : approverHashes) {
-                rating.addAll(updateHashRatings(approver, ratings, analyzedTips));
-            }
-            ratings.put(txHash, rating);
-        }
-        else {
-            if (ratings.containsKey(txHash)) {
-                rating = ratings.get(txHash);
-            }
-            else {
-                rating = new HashSet<>();
-            }
-        }
-        return rating;
-    }
-
-    public int getMaxDepth() {
-        return maxDepth;
-    }
-
-    boolean belowMaxDepth(Hash tip, int depth, Set<Hash> maxDepthOk) throws Exception {
+    boolean belowMaxDepth(Hash tip, int depth) throws Exception {
         //if tip is confirmed stop
         if (TransactionViewModel.fromHash(tangle, tip).snapshotIndex() >= depth) {
             return false;
@@ -289,10 +223,44 @@ public class TipsSelector {
         return false;
     }
 
-    static long capSum(long a, long b, long max) {
-        if (a + b < 0 || a + b > max) {
-            return max;
+    private Set<Hash> getValidAncestors(Hash entryPoint) throws Exception {
+        Set<Hash> ancestors = new HashSet<>();
+
+        Stack<Hash> stack = new Stack<>();
+        stack.push(entryPoint);
+        while (!stack.empty()) {
+            Hash currentTxHash = stack.pop();
+
+            TransactionViewModel currentTx = TransactionViewModel.fromHash(tangle, currentTxHash);
+            Set<Hash> approvers = currentTx.getApprovers(tangle).getHashes();
+            for (Hash approver : approvers) {
+                if (!ancestors.contains(approver) && isValid(approver)) {
+                    stack.push(approver);
+                }
+            }
+
+            ancestors.add(currentTxHash);
         }
-        return a + b;
+
+        return ancestors;
+    }
+
+    private boolean isValid(Hash transactionHash) throws Exception {
+        TransactionViewModel transaction = TransactionViewModel.fromHash(tangle, transactionHash);
+        
+        // Validations for tail transactions only
+        if (transaction.getCurrentIndex() == 0) {
+            if (transaction.getType() == TransactionViewModel.PREFILLED_SLOT) {
+                return false;
+            }
+            if (!transactionValidator.checkSolidity(transactionHash, false)) {
+                return false;
+            }
+            if (belowMaxDepth(transactionHash, maxDepth)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
