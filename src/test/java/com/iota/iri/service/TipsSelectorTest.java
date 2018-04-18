@@ -185,7 +185,7 @@ public class TipsSelectorTest {
         }
         Map<Hash, Long> ratings = new HashMap<>();
         long start = System.currentTimeMillis();
-        tipsSelector.serialUpdateRatings(new HashSet<>(), hashes[0], ratings, new HashSet<>(), null);
+        tipsSelector.serialUpdateRatings(new HashSet<>(), hashes[0], ratings, new HashSet<>());
         return System.currentTimeMillis() - start;
     }
 }

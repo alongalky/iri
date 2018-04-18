@@ -59,7 +59,7 @@ public class TipsSelector {
 
     public void shutdown() { }
 
-    Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash extraTip, int depth, Random seed) throws Exception {
+    Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, int depth, Random seed) throws Exception {
 
         long startTime = System.nanoTime();
         if (depth > maxDepth) {
@@ -74,10 +74,10 @@ public class TipsSelector {
             Set<Hash> maxDepthOk = new HashSet<>();
             try {
                 Hash entryPoint = entryPoint(depth);
-                serialUpdateRatings(visitedHashes, entryPoint, ratings, analyzedTips, extraTip);
+                serialUpdateRatings(visitedHashes, entryPoint, ratings, analyzedTips);
                 analyzedTips.clear();
                 if (ledgerValidator.updateDiff(visitedHashes, diff, entryPoint)) {
-                    return randomWalk(visitedHashes, diff, entryPoint, extraTip, ratings, maxDepth, maxDepthOk, seed);
+                    return randomWalk(visitedHashes, diff, entryPoint, ratings, maxDepth, maxDepthOk, seed);
                 }
                 else {
                     throw new RuntimeException("Entry point transaction failed consistency check: " + entryPoint.toString());
@@ -104,7 +104,7 @@ public class TipsSelector {
         return milestone.latestSolidSubtangleMilestone;
     }
 
-    Hash randomWalk(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash start, final Hash extraTip, final Map<Hash, Long> ratings, final int maxDepth, final Set<Hash> maxDepthOk, Random rnd) throws Exception {
+    Hash randomWalk(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash start, final Map<Hash, Long> ratings, final int maxDepth, final Set<Hash> maxDepthOk, Random rnd) throws Exception {
         Hash tip = start, tail = tip;
         Hash[] tips;
         Set<Hash> tipSet;
@@ -114,10 +114,6 @@ public class TipsSelector {
         int approverIndex;
         double ratingWeight;
         double[] walkRatings;
-        List<Hash> extraTipList = null;
-        if (extraTip != null) {
-            extraTipList = Collections.singletonList(extraTip);
-        }
         Map<Hash, Long> myDiff = new HashMap<>(diff);
         Set<Hash> myApprovedHashes = new HashSet<>(visitedHashes);
 
@@ -144,11 +140,6 @@ public class TipsSelector {
                     messageQ.publish("rtsv %s", transactionViewModel.getHash());
                     break;
                 }
-                else if (transactionViewModel.getHash().equals(extraTip)) {
-                    log.info("Reason to stop: transactionViewModel==extraTip");
-                    messageQ.publish("rtsd %s", transactionViewModel.getHash());
-                    break;
-                }
                 // set the tail here!
                 tail = tip;
                 traversedTails++;
@@ -171,7 +162,7 @@ public class TipsSelector {
                 // walk to the next approver
                 tips = tipSet.toArray(new Hash[tipSet.size()]);
                 if (!ratings.containsKey(tip)) {
-                    serialUpdateRatings(myApprovedHashes, tip, ratings, analyzedTips, extraTip);
+                    serialUpdateRatings(myApprovedHashes, tip, ratings, analyzedTips);
                     analyzedTips.clear();
                 }
 
@@ -203,7 +194,7 @@ public class TipsSelector {
         return tail;
     }
 
-    void serialUpdateRatings(final Set<Hash> visitedHashes, final Hash txHash, final Map<Hash, Long> ratings, final Set<Hash> analyzedTips, final Hash extraTip) throws Exception {
+    void serialUpdateRatings(final Set<Hash> visitedHashes, final Hash txHash, final Map<Hash, Long> ratings, final Set<Hash> analyzedTips) throws Exception {
         Stack<Hash> hashesToRate = new Stack<>();
         hashesToRate.push(txHash);
         Hash currentHash;
@@ -223,7 +214,7 @@ public class TipsSelector {
                 }
             }
             if (!addedBack && analyzedTips.add(currentHash)) {
-                long rating = (extraTip != null && visitedHashes.contains(currentHash) ? 0 : 1) + approvers.stream().map(ratings::get).filter(Objects::nonNull)
+                long rating = approvers.stream().map(ratings::get).filter(Objects::nonNull)
                         .reduce((a, b) -> capSum(a, b, Long.MAX_VALUE / 2)).orElse(0L);
                 ratings.put(currentHash, rating);
             }
