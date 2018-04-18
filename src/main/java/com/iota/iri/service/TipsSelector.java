@@ -59,7 +59,7 @@ public class TipsSelector {
 
     public void shutdown() { }
 
-    Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash reference, final Hash extraTip, int depth, Random seed) throws Exception {
+    Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, final Hash extraTip, int depth, Random seed) throws Exception {
 
         long startTime = System.nanoTime();
         if (depth > maxDepth) {
@@ -73,14 +73,14 @@ public class TipsSelector {
             Set<Hash> analyzedTips = new HashSet<>();
             Set<Hash> maxDepthOk = new HashSet<>();
             try {
-                Hash tip = entryPoint(reference, extraTip, depth);
-                serialUpdateRatings(visitedHashes, tip, ratings, analyzedTips, extraTip);
+                Hash entryPoint = entryPoint(depth);
+                serialUpdateRatings(visitedHashes, entryPoint, ratings, analyzedTips, extraTip);
                 analyzedTips.clear();
-                if (ledgerValidator.updateDiff(visitedHashes, diff, tip)) {
-                    return randomWalk(visitedHashes, diff, tip, extraTip, ratings, maxDepth, maxDepthOk, seed);
+                if (ledgerValidator.updateDiff(visitedHashes, diff, entryPoint)) {
+                    return randomWalk(visitedHashes, diff, entryPoint, extraTip, ratings, maxDepth, maxDepthOk, seed);
                 }
                 else {
-                    throw new RuntimeException("starting tip failed consistency check: " + tip.toString());
+                    throw new RuntimeException("Entry point transaction failed consistency check: " + entryPoint.toString());
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -93,14 +93,7 @@ public class TipsSelector {
         return null;
     }
 
-    Hash entryPoint(final Hash reference, final Hash extraTip, final int depth) throws Exception {
-
-        if (extraTip == null) {
-            //trunk
-            return reference != null ? reference : milestone.latestSolidSubtangleMilestone;
-        }
-
-        //branch (extraTip)
+    Hash entryPoint(final int depth) throws Exception {
         int milestoneIndex = Math.max(milestone.latestSolidSubtangleMilestoneIndex - depth - 1, 0);
         MilestoneViewModel milestoneViewModel =
                 MilestoneViewModel.findClosestNextMilestone(tangle, milestoneIndex, testnet, milestoneStartIndex);

@@ -56,8 +56,6 @@ import static io.undertow.Handlers.path;
 @SuppressWarnings("unchecked")
 public class API {
 
-    public static final String REFERENCE_TRANSACTION_NOT_FOUND = "reference transaction not found";
-    public static final String REFERENCE_TRANSACTION_TOO_OLD = "reference transaction is too old";
     private static final Logger log = LoggerFactory.getLogger(API.class);
     private final IXI ixi;
     private final int milestoneStartIndex;
@@ -76,8 +74,6 @@ public class API {
 
     private final static long MAX_TIMESTAMP_VALUE = (3^27 - 1) / 2;
 
-    private final int minRandomWalks;
-    private final int maxRandomWalks;
     private final int maxFindTxs;
     private final int maxRequestList;
     private final int maxGetTrytes;
@@ -96,8 +92,6 @@ public class API {
     public API(Iota instance, IXI ixi) {
         this.instance = instance;
         this.ixi = ixi;
-        minRandomWalks = instance.configuration.integer(DefaultConfSettings.MIN_RANDOM_WALKS);
-        maxRandomWalks = instance.configuration.integer(DefaultConfSettings.MAX_RANDOM_WALKS);
         maxFindTxs = instance.configuration.integer(DefaultConfSettings.MAX_FIND_TRANSACTIONS);
         maxRequestList = instance.configuration.integer(DefaultConfSettings.MAX_REQUESTS_LIST);
         maxGetTrytes = instance.configuration.integer(DefaultConfSettings.MAX_GET_TRYTES);
@@ -288,13 +282,12 @@ public class API {
                                 .create("This operations cannot be executed: The subtangle has not been updated yet.");
                     }
 
-                    final String reference = request.containsKey("reference") ? getParameterAsStringAndValidate(request,"reference", HASH_SIZE) : null;
                     final int depth = getParameterAsInt(request, "depth");
-                    if(depth < 0 || (reference == null && depth == 0)) {
+                    if(depth <= 0) {
                         return ErrorResponse.create("Invalid depth input");
                     }
                     try {
-                        final Hash[] tips = getTransactionToApproveStatement(depth, reference);
+                        final Hash[] tips = getTransactionToApproveStatement(depth);
                         if(tips == null) {
                             return ErrorResponse.create("The subtangle is not solid");
                         }
@@ -470,18 +463,6 @@ public class API {
         return CheckConsistency.create(state,info);
     }
     
-    private double getParameterAsDouble(Map<String, Object> request, String paramName) throws ValidationException {
-        validateParamExists(request, paramName);
-        final double result;
-        try {
-                result = ((Double) request.get(paramName));
-            } catch (ClassCastException e) {
-                throw new ValidationException("Invalid " + paramName + " input");
-            }
-        return result;
-    }
-
-
     private int getParameterAsInt(Map<String, Object> request, String paramName) throws ValidationException {
         validateParamExists(request, paramName);
         final int result;
@@ -579,26 +560,13 @@ public class API {
         ellapsedTime_getTxToApprove += ellapsedTime;
     }
 
-    public synchronized Hash[] getTransactionToApproveStatement(int depth, final String reference) throws Exception {
+    public synchronized Hash[] getTransactionToApproveStatement(int depth) throws Exception {
         int tipsToApprove = 2;
         Hash[] tips = new Hash[tipsToApprove];
         final SecureRandom random = new SecureRandom();
-        Hash referenceHash = null;
         int maxDepth = instance.tipsSelector.getMaxDepth();
         if (depth > maxDepth) {
             depth = maxDepth;
-        }
-        if(reference != null) {
-            referenceHash = new Hash(reference);
-            if (!TransactionViewModel.exists(instance.tangle, referenceHash)) {
-                throw new RuntimeException(REFERENCE_TRANSACTION_NOT_FOUND);
-            } else {
-                TransactionViewModel transactionViewModel = TransactionViewModel.fromHash(instance.tangle, referenceHash);
-                if (transactionViewModel.snapshotIndex() != 0
-                        && transactionViewModel.snapshotIndex() < instance.milestone.latestSolidSubtangleMilestoneIndex - depth) {
-                    throw new RuntimeException(REFERENCE_TRANSACTION_TOO_OLD);
-                }
-            }
         }
 
         instance.milestone.latestSnapshot.rwlock.readLock().lock();
@@ -606,7 +574,7 @@ public class API {
             Set<Hash> visitedHashes = new HashSet<>();
             Map<Hash, Long> diff = new HashMap<>();
             for (int i = 0; i < tipsToApprove; i++) {
-                tips[i] = instance.tipsSelector.transactionToApprove(visitedHashes, diff, referenceHash, tips[0], depth, random);
+                tips[i] = instance.tipsSelector.transactionToApprove(visitedHashes, diff, tips[0], depth, random);
                 //update world view, so next tips selected will be inter-consistent
                 if (tips[i] == null || !instance.ledgerValidator.updateDiff(visitedHashes, diff, tips[i])) {
                     return null;
@@ -1098,7 +1066,7 @@ public class API {
 
     //only available on testnet
     private synchronized void storeMessageStatement(final String address, final String message) throws Exception {
-        final Hash[] txToApprove = getTransactionToApproveStatement(3, null, 5);
+        final Hash[] txToApprove = getTransactionToApproveStatement(3);
 
         final int txMessageSize = TransactionViewModel.SIGNATURE_MESSAGE_FRAGMENT_TRINARY_SIZE / 3;
 
