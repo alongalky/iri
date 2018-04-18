@@ -267,27 +267,6 @@ public class TipsSelector {
         return rating;
     }
 
-    long recursiveUpdateRatings(Hash txHash, Map<Hash, Long> ratings, Set<Hash> analyzedTips) throws Exception {
-        long rating = 1;
-        if (analyzedTips.add(txHash)) {
-            TransactionViewModel transactionViewModel = TransactionViewModel.fromHash(tangle, txHash);
-            Set<Hash> approverHashes = transactionViewModel.getApprovers(tangle).getHashes();
-            for (Hash approver : approverHashes) {
-                rating = capSum(rating, recursiveUpdateRatings(approver, ratings, analyzedTips), Long.MAX_VALUE / 2);
-            }
-            ratings.put(txHash, rating);
-        }
-        else {
-            if (ratings.containsKey(txHash)) {
-                rating = ratings.get(txHash);
-            }
-            else {
-                rating = 0;
-            }
-        }
-        return rating;
-    }
-
     public int getMaxDepth() {
         return maxDepth;
     }
