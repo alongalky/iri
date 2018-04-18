@@ -61,19 +61,47 @@ public class TipsSelector {
     public void shutdown() { }
 
     public Hash[] getTransactionsToApprove(int depth) throws Exception {
-        int tipsToApprove = 2;
-        Hash[] tips = new Hash[tipsToApprove];
-        final SecureRandom random = new SecureRandom();
+        Hash[] tips = new Hash[2];
         if (depth > maxDepth) {
             depth = maxDepth;
         }
 
+        if (milestone.latestSolidSubtangleMilestoneIndex <= milestoneStartIndex &&
+                milestone.latestMilestoneIndex != milestoneStartIndex) {
+            return null;
+        }
+
         milestone.latestSnapshot.rwlock.readLock().lock();
+
+        Hash entryPoint = entryPoint(depth);
         try {
             Set<Hash> visitedHashes = new HashSet<>();
             Map<Hash, Long> diff = new HashMap<>();
-            for (int i = 0; i < tipsToApprove; i++) {
-                tips[i] = transactionToApprove(visitedHashes, diff, depth, random);
+
+            for (int i = 0; i < 2; i++) {
+                long startTime = System.nanoTime();
+
+                final SecureRandom random = new SecureRandom();
+
+                Map<Hash, Long> ratings = new HashMap<>();
+                Set<Hash> analyzedTips = new HashSet<>();
+                Set<Hash> maxDepthOk = new HashSet<>();
+                try {
+                    analyzedTips.clear();
+                    if (ledgerValidator.updateDiff(visitedHashes, diff, entryPoint)) {
+                        tips[i] = randomWalk(visitedHashes, diff, entryPoint, ratings, maxDepth, maxDepthOk, random);
+                    }
+                    else {
+                        throw new RuntimeException("Entry point transaction failed consistency check: " + entryPoint.toString());
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    log.error("Encountered error: " + e.getLocalizedMessage());
+                    throw e;
+                } finally {
+                    API.incEllapsedTime_getTxToApprove(System.nanoTime() - startTime);
+                }
+
                 //update world view, so next tips selected will be inter-consistent
                 if (tips[i] == null || !ledgerValidator.updateDiff(visitedHashes, diff, tips[i])) {
                     return null;
@@ -89,41 +117,7 @@ public class TipsSelector {
         throw new RuntimeException("inconsistent tips pair selected");
     }
 
-    Hash transactionToApprove(final Set<Hash> visitedHashes, final Map<Hash, Long> diff, int depth, Random seed) throws Exception {
-
-        long startTime = System.nanoTime();
-        if (depth > maxDepth) {
-            depth = maxDepth;
-        }
-
-        if (milestone.latestSolidSubtangleMilestoneIndex > milestoneStartIndex ||
-                milestone.latestMilestoneIndex == milestoneStartIndex) {
-
-            Map<Hash, Long> ratings = new HashMap<>();
-            Set<Hash> analyzedTips = new HashSet<>();
-            Set<Hash> maxDepthOk = new HashSet<>();
-            try {
-                Hash entryPoint = entryPoint(depth);
-                serialUpdateRatings(visitedHashes, entryPoint, ratings, analyzedTips);
-                analyzedTips.clear();
-                if (ledgerValidator.updateDiff(visitedHashes, diff, entryPoint)) {
-                    return randomWalk(visitedHashes, diff, entryPoint, ratings, maxDepth, maxDepthOk, seed);
-                }
-                else {
-                    throw new RuntimeException("Entry point transaction failed consistency check: " + entryPoint.toString());
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                log.error("Encountered error: " + e.getLocalizedMessage());
-                throw e;
-            } finally {
-                API.incEllapsedTime_getTxToApprove(System.nanoTime() - startTime);
-            }
-        }
-        return null;
-    }
-
-    Hash entryPoint(final int depth) throws Exception {
+    private Hash entryPoint(final int depth) throws Exception {
         int milestoneIndex = Math.max(milestone.latestSolidSubtangleMilestoneIndex - depth - 1, 0);
         MilestoneViewModel milestoneViewModel =
                 MilestoneViewModel.findClosestNextMilestone(tangle, milestoneIndex, testnet, milestoneStartIndex);
