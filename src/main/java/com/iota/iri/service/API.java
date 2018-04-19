@@ -601,19 +601,7 @@ public class API {
     }
 
     public synchronized Hash[] getTransactionToApproveStatement(int depth) throws Exception {
-        Hash[] tips = instance.tipsSelector.getTransactionsToApprove(depth);
-
-        API.incCounter_getTxToApprove();
-        if ((getCounter_getTxToApprove() % 100) == 0) {
-            String sb = "Last 100 getTxToApprove consumed " +
-                    API.getEllapsedTime_getTxToApprove() / 1000000000L +
-                    " seconds processing time.";
-            log.info(sb);
-            counter_getTxToApprove = 0;
-            ellapsedTime_getTxToApprove = 0L;
-        }
-
-        return tips;
+        return instance.tipsSelector.getTransactionsToApprove(depth);
     }
 
     private synchronized AbstractResponse getTipsStatement() throws Exception {

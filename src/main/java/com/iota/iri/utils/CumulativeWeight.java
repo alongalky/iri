@@ -7,10 +7,7 @@ import java.util.stream.Collectors;
 
 import com.iota.iri.model.Hash;
 
-public final class CumulativeWeight {
-    // Prevents the class from being instantiated
-    private CumulativeWeight() {}
-
+public interface CumulativeWeight {
     public static Map<Hash, Long> calculateCumulativeWeight(Set<Hash> validTransactions, Hash entryPoint) {
         // TBD: this is a stub, currently vies all validTransactions weight 1
         return validTransactions.stream()

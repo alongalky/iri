@@ -105,8 +105,8 @@ public class Iota {
         udpReceiver = new UDPReceiver(udpPort, node, configuration.integer(Configuration.DefaultConfSettings.TRANSACTION_PACKET_SIZE));
         ledgerValidator = new LedgerValidator(tangle, milestone, transactionRequester, messageQ);
         tipsSolidifier = new TipsSolidifier(tangle, transactionValidator, tipsViewModel);
-        tipsSelector = new TipsSelector(tangle, ledgerValidator, transactionValidator, milestone,
-                maxTipSearchDepth, messageQ, testnet, milestoneStartIndex);
+        tipsSelector = new TipsSelector(tangle, transactionValidator, milestone,
+                maxTipSearchDepth, testnet, milestoneStartIndex);
     }
 
     public void init() throws Exception {
